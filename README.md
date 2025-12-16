@@ -70,3 +70,14 @@ The system uses a strict prompt to ensure JSON output. If you change the model, 
   "has_errors": boolean,
   "report_html": "<li>Error -> Correction</li>"
 }
+```
+### 4 🚧 Handling Rate Limits
+If you encounter 429 Resource Exhausted errors from Gemini:
+
+* Increase the Wait node duration inside the loop (default: 5 seconds).
+* Ensure the Retry on Fail option is enabled in the LLM Chain node settings.
+
+### 📝 License
+This project is licensed under the MIT License. Feel free to fork, modify, and use it to improve open-source documentation!
+
+Automated with ❤️ using n8n and Gemini
