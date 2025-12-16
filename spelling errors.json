@@ -1,0 +1,409 @@
+{
+  "name": "spelling errors",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "26be0aa6-dab9-4b50-ba41-0bec241b947b",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/repositories",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "language:python is:public archived:false stars:50..1000 license:mit"
+            },
+            {
+              "name": "per_page",
+              "value": "10"
+            },
+            {
+              "name": "page",
+              "value": "={{ $json.page_number }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "d133c2de-4463-4810-929f-9e9237923302",
+      "name": "HTTP Request",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "rd2cVGpdDZGdR8TN",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        832,
+        0
+      ],
+      "id": "3eb9f55d-2e2b-4002-a30a-ab361adc2cae",
+      "name": "Loop Over Items",
+      "executeOnce": false,
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "dowload readme",
+      "typeVersion": 1,
+      "position": [
+        896,
+        176
+      ],
+      "id": "4ceb955c-eb75-4e92-bf94-7e0ba3a08084"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        624,
+        32
+      ],
+      "id": "a27841c9-f8f9-47ea-8b4c-ee6218573a9c",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        1136,
+        368
+      ],
+      "id": "8f6b05af-f319-41be-aa11-91fe244441ed",
+      "name": "When chat message received",
+      "webhookId": "663ac908-3297-47c9-84cb-e385955a5ca2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert technical documentation reviewer. Your task is to analyze the text of a GitHub README and find spelling errors.\n\nRules:\n\nIgnore code, commands, URLs, variable names, and technical slang (e.g., “repo,” “deploy,” “config”).\n\nIf the text is in English, correct the English.\n\nYou must respond ONLY with a valid JSON object. Do not add markdown (such as ```json) or other text before or after.\n\nRequired JSON format: { “has_errors”: boolean, // true if you found errors, false if it is clean “report_html”: string // An HTML list <li> with errors and corrections. If there are no errors, leave the string empty. }\n\nExample of report_html: “<li>‘mistaeke’ -> ‘mistake’ (line 5)</li><li>‘funtion’ -> ‘function’</li>”\n\nHere is the text to be analyzed: {{ $json.readme_text }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1584,
+        336
+      ],
+      "id": "87b366e1-41ef-47e4-bdc8-1a4d7290a8dc",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        544
+      ],
+      "id": "f897f39b-672b-4779-9537-6231ae0759b7",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rrG67Ca4JyuqLTKM",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// \"items\" qui contiene tutti i risultati del loop\nlet emailBody = \"<h2>Report GitHub scan</h2>\";\nlet foundAny = false;\n\nfor (const item of items) {\n    const data = item.json;\n\n    // Se non dovevamo saltarlo E se ha errori\n    if (!data.skip && data.has_errors) {\n        foundAny = true;\n        emailBody += `<h3>Repo: <a href=\"${data.repo_url}\">${data.repo_name}</a></h3>`;\n        emailBody += `<ul>${data.report_html}</ul>`;\n        emailBody += `<hr>`;\n    }\n}\n\nif (!foundAny) {\n    emailBody += \"<p>No errors found today!</p>\";\n}\n\nreturn [{\n    json: {\n        email_html: emailBody,\n        send_email: foundAny // Un flag per decidere se inviare\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "0f6bb808-92b6-40da-96d4-59d5dc86f469",
+      "name": "aggregate results"
+    },
+    {
+      "parameters": {
+        "sendTo": "antoniofabriziofiume@libero.it",
+        "subject": "=Report Errori GitHub del {{ $today }}",
+        "message": "=email_html: {{ $json.email_html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        48
+      ],
+      "id": "aa0ffcdd-a857-4c55-be4f-59a19036c9f0",
+      "name": "Send a message",
+      "webhookId": "866c84ec-91d6-4f1d-99c8-fb197989d9d4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "fnQIz06B6bEloNaS",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "if (items[0].json.error) {\n  return [{json: { skip: true }}];\n}\n\nconst contentBase64 = items[0].json.content;\nconst repoUrl = items[0].json.html_url;\nconst repoName = items[0].json.url.split('/repos/')[1].replace('/readme','');\n\n\nlet text = \"\";\ntry {\n  text = Buffer.from(contentBase64, 'base64').toString('utf-8');\n} catch (e) {\n  return [{json: { skip: true }}];\n}\n\n\nif (text.length > 15000) {\n    text = text.substring(0, 15000);\n}\n\nreturn [{\n  json: {\n    readme_text: text,\n    repo_name: repoName,\n    repo_url: items[0].json.html_url,\n    skip: false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        224
+      ],
+      "id": "b662daec-91dd-4e8e-912a-26858bf26dac",
+      "name": "Decode"
+    },
+    {
+      "parameters": {
+        "jsCode": "const llmOutput = items[0].json.text; \n\n\nconst originalData = $('Decode').item.json; \n\nlet parsed = {};\n\ntry {\n    const cleanJson = llmOutput.replace(/```json/g, '').replace(/```/g, '').trim();\n    parsed = JSON.parse(cleanJson);\n} catch (e) {\n    parsed = { has_errors: false, report_html: \"\" };\n}\n\n// 3. Uniamo tutto insieme\nreturn [{\n    json: {\n        ...originalData,\n        \n        has_errors: parsed.has_errors,\n        report_html: parsed.report_html || \"\"\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        400
+      ],
+      "id": "39b365c4-92c0-4a24-b6d5-fb7f4e7fe7e1",
+      "name": "decode LLM Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const randomPage = Math.floor(Math.random() * 50) + 1;\n\nreturn [{\n    json: {\n        page_number: randomPage\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "21352a41-d230-46b3-ab64-ab62484c89c0",
+      "name": "random page number"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.full_name }}/readme",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        912,
+        320
+      ],
+      "id": "d2752617-fa92-4dc1-9ae0-e4cd872adb10",
+      "name": "Download Readme",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "rd2cVGpdDZGdR8TN",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "random page number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "aggregate results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "dowload readme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "dowload readme": {
+      "main": [
+        [
+          {
+            "node": "Download Readme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "decode LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aggregate results": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "decode LLM Response": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "random page number": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Readme": {
+      "main": [
+        [
+          {
+            "node": "Decode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1a0b4f27-f64d-4d6a-b56a-d8571bf9c947",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "090be1c2a8c32e91f3a3cad13f220511f19f3e8c8e7a28d4baca5f54f3af2a50"
+  },
+  "id": "6nEkaA3hJTcunAdQ",
+  "tags": []
+}
